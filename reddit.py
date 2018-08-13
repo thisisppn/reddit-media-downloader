@@ -7,12 +7,17 @@ import argparse
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('subreddit', help='name of the subreddit')
+parser.add_argument('--sort', default='top', help='top or hot')
 
 args = parser.parse_args()
 print(args)
 
 sub_reddit = args.subreddit
-url = 'https://www.reddit.com/r/{0}/top.json?sort=top&t=all'.format(sub_reddit)
+if args.sort == 'top':
+    url = 'https://www.reddit.com/r/{0}/top.json?sort=top&t=all'.format(sub_reddit)
+else:
+    url = 'https://www.reddit.com/r/{0}/.json?'.format(sub_reddit)
+
 gfycat = 'https://gfycat.com/cajax/get/{0}'
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36',
