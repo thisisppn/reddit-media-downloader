@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import requests as r
 from urllib.request import urlretrieve
 import os
@@ -6,17 +8,25 @@ import sys
 import argparse
 
 parser = argparse.ArgumentParser(description='Process some integers.')
-parser.add_argument('subreddit', help='name of the subreddit')
+parser.add_argument('--subreddit', help='name of the subreddit')
+parser.add_argument('--user', help='user name')
 parser.add_argument('--sort', default='top', help='top or hot')
 
 args = parser.parse_args()
-print(args)
+print(args) 
 
-sub_reddit = args.subreddit
-if args.sort == 'top':
-    url = 'https://www.reddit.com/r/{0}/top.json?sort=top&t=all'.format(sub_reddit)
+if args.subreddit:
+    sub_reddit = args.subreddit
+
+    if args.sort == 'top':
+        url = 'https://www.reddit.com/r/{0}/top.json?sort=top&t=all'.format(sub_reddit)
+    else:
+        url = 'https://www.reddit.com/r/{0}/.json?'.format(sub_reddit)
+elif args.user:
+    sub_reddit = args.user
+    url = 'https://www.reddit.com/user/{0}.json'.format(sub_reddit)
 else:
-    url = 'https://www.reddit.com/r/{0}/.json?'.format(sub_reddit)
+    raise parser.error('No user or subreddit name')
 
 gfycat = 'https://gfycat.com/cajax/get/{0}'
 headers = {
@@ -26,14 +36,14 @@ headers = {
 exceptions = {}
 
 def get_gfycat_url(gfycat_name):
-	response = r.get(gfycat.format(gfycat_name), headers=headers)
+        response = r.get(gfycat.format(gfycat_name), headers=headers)
 
-	if response.status_code == 200:
-		response_json = response.json()
-		mp4url = response_json['gfyItem']['mp4Url']
-		return mp4url
-	else:
-		return False
+        if response.status_code == 200:
+                response_json = response.json()
+                mp4url = response_json['gfyItem']['mp4Url']
+                return mp4url
+        else:
+                return False
 
 def reporthook(count, block_size, total_size):
     global start_time
@@ -57,35 +67,35 @@ def download_media(img_url, file_name, source, folder_name):
             os.makedirs(file_path)
         
         if source == 'gfycat.com':
-        	gfycat_name = img_url.split('/')[-1]
-        	img_url = get_gfycat_url(gfycat_name)
-        	if img_url:
-	        	file_suffix = os.path.splitext(img_url)[1]
-	        	filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
-	        	if os.path.exists(filename):
-	        		print("File {0} already exists".format(filename))
-	        		return False
-	        	print('\nDownloading gfycat', img_url)
-	        	urlretrieve(img_url, filename, reporthook)
+                gfycat_name = img_url.split('/')[-1]
+                img_url = get_gfycat_url(gfycat_name)
+                if img_url:
+                        file_suffix = os.path.splitext(img_url)[1]
+                        filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
+                        if os.path.exists(filename):
+                                print("File {0} already exists".format(filename))
+                                return False
+                        print('\nDownloading gfycat', img_url)
+                        urlretrieve(img_url, filename, reporthook)
         elif source == 'i.imgur.com':
-        	img_url = img_url.replace('.gifv', '.mp4')
-        	file_suffix = os.path.splitext(img_url)[1]
-        	filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
-        	if os.path.exists(filename):
-	        		print("File {0} already exists".format(filename))
-	        		return False
-        	print('\nDownloading imgur', img_url)
-        	urlretrieve(img_url, filename, reporthook)
+                img_url = img_url.replace('.gifv', '.mp4')
+                file_suffix = os.path.splitext(img_url)[1]
+                filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
+                if os.path.exists(filename):
+                                print("File {0} already exists".format(filename))
+                                return False
+                print('\nDownloading imgur', img_url)
+                urlretrieve(img_url, filename, reporthook)
         elif source == 'i.redd.it':
-        	file_suffix = os.path.splitext(img_url)[1]
-        	filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
-        	if os.path.exists(filename):
-	        		print("File {0} already exists".format(filename))
-	        		return False
-        	print('\nDownloading imgur', img_url)
-        	urlretrieve(img_url, filename, reporthook)
+                file_suffix = os.path.splitext(img_url)[1]
+                filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
+                if os.path.exists(filename):
+                                print("File {0} already exists".format(filename))
+                                return False
+                print('\nDownloading reddit', img_url)
+                urlretrieve(img_url, filename, reporthook)
         else:
-        	exceptions[source] = img_url
+                exceptions[source] = img_url
 
     except IOError as e:
         print('??????', e)
@@ -95,24 +105,31 @@ def download_media(img_url, file_name, source, folder_name):
 
 
 def request_reddit(url):
-	response = r.get(url, headers=headers)
-	if response.status_code == 200:
-		response_json = response.json()
-		next_page = response_json['data']['after']
-		posts = response_json['data']['children']
-		for post in posts:
-			# Identify post download url and source.
-			source = post['data']['domain']
-			media_url = post['data']['url']
-			filename = post['data']['title']
-			download_media(media_url, filename.replace('/', '_'), source, 'downloads/'+sub_reddit)
+        response = r.get(url, headers=headers)
+        if response.status_code == 200:
+                response_json = response.json()
+                next_page = response_json['data']['after']
+                posts = response_json['data']['children']
+                for post in posts:
+                        # Identify post download url and source.
+                        try:
+                                source = post['data']['domain']
+                        except KeyError:
+                                print('No domain in data object')
+                                continue
+                        media_url = post['data']['url']
+                        filename = post['data']['title']
+                        download_media(media_url, filename.replace('/', '_'), source, 'downloads/'+sub_reddit)
 
-		if next_page is not None:
-			print("\nHeading over to next page ... ")
-			url = url+'&after='+next_page
-			request_reddit(url)
-	else:
-		print(response)
+                if next_page is not None:
+                        print("\nHeading over to next page ... ")
+                        if '?' in url:
+                                url = url+'&after='+next_page
+                        else:
+                                url = url + '?after='+next_page
+                        request_reddit(url)
+        else:
+                print(response)
 
 
 request_reddit(url)
