@@ -7,6 +7,8 @@ import time
 import sys
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+import requests
+import shutil
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('--subreddit', help='name of the subreddit')
@@ -116,7 +118,11 @@ def download_media(img_url, file_name, source, folder_name):
                                 print("File {0} already exists".format(filename))
                                 return False
                         print('\nDownloading redgifs', img_url)
-                        urlretrieve(img_url, filename, reporthook)
+                        #urlretrieve(img_url, filename, reporthook)
+                        with requests.get(img_url, stream=True) as r:
+                            with open(filename, 'wb') as f:
+                                shutil.copyfileobj(r.raw, f)
+
         else:
                 exceptions[source] = img_url
 
