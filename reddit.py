@@ -38,6 +38,7 @@ headers = {
 }
 
 exceptions = {}
+filenames = []
 
 def get_gfycat_url(gfycat_name):
         response = r.get(gfycat.format(gfycat_name), headers=headers)
@@ -86,27 +87,30 @@ def download_media(img_url, file_name, source, folder_name):
                 if img_url:
                         file_suffix = os.path.splitext(img_url)[1]
                         filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
-                        if os.path.exists(filename):
+                        if os.path.exists(filename) or filename in filenames:
                                 print("File {0} already exists".format(filename))
                                 return False
                         print('\nDownloading gfycat', img_url)
+                        filenames.append(filename)
                         urlretrieve(img_url, filename, reporthook)
         elif source == 'i.imgur.com':
                 img_url = img_url.replace('.gifv', '.mp4')
                 file_suffix = os.path.splitext(img_url)[1]
                 filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
-                if os.path.exists(filename):
+                if os.path.exists(filename) or filename in filenames:
                                 print("File {0} already exists".format(filename))
                                 return False
                 print('\nDownloading imgur', img_url)
+                filenames.append(filename)
                 urlretrieve(img_url, filename, reporthook)
         elif source == 'i.redd.it':
                 file_suffix = os.path.splitext(img_url)[1]
                 filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
-                if os.path.exists(filename):
+                if os.path.exists(filename) or filename in filenames:
                                 print("File {0} already exists".format(filename))
                                 return False
                 print('\nDownloading reddit', img_url)
+                filenames.append(filename)
                 urlretrieve(img_url, filename, reporthook)
         elif source == 'redgifs.com':
                 redgifs_name = img_url.split('/')[-1]
@@ -114,11 +118,11 @@ def download_media(img_url, file_name, source, folder_name):
                 if img_url:
                         file_suffix = os.path.splitext(img_url)[1]
                         filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
-                        if os.path.exists(filename):
+                        if os.path.exists(filename) or filename in filenames:
                                 print("File {0} already exists".format(filename))
                                 return False
                         print('\nDownloading redgifs', img_url)
-                        #urlretrieve(img_url, filename, reporthook)
+                        filenames.append(filename)
                         with requests.get(img_url, stream=True) as r:
                             with open(filename, 'wb') as f:
                                 shutil.copyfileobj(r.raw, f)
