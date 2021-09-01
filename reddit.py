@@ -29,6 +29,7 @@ else:
     raise parser.error('No user or subreddit name')
 
 gfycat = 'https://gfycat.com/cajax/get/{0}'
+redgifs = 'https://api.redgifs.com/v1/gfycats/{}'
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36',
 }
@@ -37,6 +38,16 @@ exceptions = {}
 
 def get_gfycat_url(gfycat_name):
         response = r.get(gfycat.format(gfycat_name), headers=headers)
+
+        if response.status_code == 200:
+                response_json = response.json()
+                mp4url = response_json['gfyItem']['mp4Url']
+                return mp4url
+        else:
+                return False
+
+def get_redgifs_url(redgifs_name):
+        response = r.get(redgifs.format(redgifs_name), headers=headers)
 
         if response.status_code == 200:
                 response_json = response.json()
@@ -94,6 +105,17 @@ def download_media(img_url, file_name, source, folder_name):
                                 return False
                 print('\nDownloading reddit', img_url)
                 urlretrieve(img_url, filename, reporthook)
+        elif source == 'redgifs.com':
+                redgifs_name = img_url.split('/')[-1]
+                img_url = get_redgifs_url(redgifs_name)
+                if img_url:
+                        file_suffix = os.path.splitext(img_url)[1]
+                        filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
+                        if os.path.exists(filename):
+                                print("File {0} already exists".format(filename))
+                                return False
+                        print('\nDownloading redgifs', img_url)
+                        urlretrieve(img_url, filename, reporthook)
         else:
                 exceptions[source] = img_url
 
