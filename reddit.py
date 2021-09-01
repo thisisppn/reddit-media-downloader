@@ -6,6 +6,7 @@ import os
 import time
 import sys
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('--subreddit', help='name of the subreddit')
@@ -125,6 +126,17 @@ def download_media(img_url, file_name, source, folder_name):
         print('?? ?', e)
 
 
+def process_post(post):
+    # Identify post download url and source.
+    try:
+            source = post['data']['domain']
+    except KeyError:
+            print('No domain in data object')
+            return
+    media_url = post['data']['url']
+    filename = post['data']['title']
+    download_media(media_url, filename.replace('/', '_'), source, 'downloads/'+sub_reddit)
+
 
 def request_reddit(url):
         response = r.get(url, headers=headers)
@@ -132,16 +144,10 @@ def request_reddit(url):
                 response_json = response.json()
                 next_page = response_json['data']['after']
                 posts = response_json['data']['children']
-                for post in posts:
-                        # Identify post download url and source.
-                        try:
-                                source = post['data']['domain']
-                        except KeyError:
-                                print('No domain in data object')
-                                continue
-                        media_url = post['data']['url']
-                        filename = post['data']['title']
-                        download_media(media_url, filename.replace('/', '_'), source, 'downloads/'+sub_reddit)
+
+                with ThreadPoolExecutor(max_workers=16) as runner:
+                    for post in posts:
+                        runner.submit(process_post, post)
 
                 if next_page is not None:
                         print("\nHeading over to next page ... ")
