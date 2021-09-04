@@ -7,13 +7,13 @@ import time
 import sys
 import argparse
 from concurrent.futures import ThreadPoolExecutor
-import requests
 import shutil
 
 parser = argparse.ArgumentParser(description='Process some integers.')
+parser.add_argument('--sort', default='top', help='top or hot')
 parser.add_argument('--subreddit', help='name of the subreddit')
 parser.add_argument('--user', help='user name')
-parser.add_argument('--sort', default='top', help='top or hot')
+parser.add_argument('--threads', type=int, default=1, help='parallel threads amount, default 1')
 
 args = parser.parse_args()
 print(args) 
@@ -39,6 +39,7 @@ headers = {
 
 exceptions = {}
 filenames = []
+downloads = []
 
 def get_gfycat_url(gfycat_name):
         response = r.get(gfycat.format(gfycat_name), headers=headers)
@@ -85,16 +86,23 @@ def download_media(img_url, file_name, source, folder_name):
                 gfycat_name = img_url.split('/')[-1]
                 img_url = get_gfycat_url(gfycat_name)
                 if img_url:
-                        file_suffix = os.path.splitext(img_url)[1]
-                        filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
-                        if os.path.exists(filename) or filename in filenames:
-                                print("File {0} already exists".format(filename))
-                                return False
-                        print('\nDownloading gfycat', img_url)
-                        filenames.append(filename)
-                        urlretrieve(img_url, filename, reporthook)
+                    if img_url in downloads:
+                        print('\n{0} already downloaded'.format(img_url))
+                        return False
+                    file_suffix = os.path.splitext(img_url)[1]
+                    filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
+                    if os.path.exists(filename) or filename in filenames:
+                        print("File {0} already exists".format(filename))
+                        return False
+                    print('\nDownloading gfycat', img_url)
+                    filenames.append(filename)
+                    downloads.append(img_url)
+                    urlretrieve(img_url, filename, reporthook)
         elif source == 'i.imgur.com':
                 img_url = img_url.replace('.gifv', '.mp4')
+                if img_url in downloads:
+                    print('\n{0} already downloaded'.format(img_url))
+                    return False
                 file_suffix = os.path.splitext(img_url)[1]
                 filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
                 if os.path.exists(filename) or filename in filenames:
@@ -102,8 +110,12 @@ def download_media(img_url, file_name, source, folder_name):
                                 return False
                 print('\nDownloading imgur', img_url)
                 filenames.append(filename)
+                downloads.append(img_url)
                 urlretrieve(img_url, filename, reporthook)
         elif source == 'i.redd.it':
+                if img_url in downloads:
+                    print('\n{0} already downloaded'.format(img_url))
+                    return False
                 file_suffix = os.path.splitext(img_url)[1]
                 filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
                 if os.path.exists(filename) or filename in filenames:
@@ -111,21 +123,26 @@ def download_media(img_url, file_name, source, folder_name):
                                 return False
                 print('\nDownloading reddit', img_url)
                 filenames.append(filename)
+                downloads.append(img_url)
                 urlretrieve(img_url, filename, reporthook)
         elif source == 'redgifs.com':
                 redgifs_name = img_url.split('/')[-1]
                 img_url = get_redgifs_url(redgifs_name)
                 if img_url:
-                        file_suffix = os.path.splitext(img_url)[1]
-                        filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
-                        if os.path.exists(filename) or filename in filenames:
-                                print("File {0} already exists".format(filename))
-                                return False
-                        print('\nDownloading redgifs', img_url)
-                        filenames.append(filename)
-                        with requests.get(img_url, stream=True) as r:
-                            with open(filename, 'wb') as f:
-                                shutil.copyfileobj(r.raw, f)
+                    if img_url in downloads:
+                        print('\n{0} already downloaded'.format(img_url))
+                        return False
+                    file_suffix = os.path.splitext(img_url)[1]
+                    filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
+                    if os.path.exists(filename) or filename in filenames:
+                        print("File {0} already exists".format(filename))
+                        return False
+                    print('\nDownloading redgifs', img_url)
+                    filenames.append(filename)
+                    downloads.append(img_url)
+                    with r.get(img_url, stream=True) as req:
+                        with open(filename, 'wb') as f:
+                            shutil.copyfileobj(req.raw, f)
 
         else:
                 exceptions[source] = img_url
@@ -148,14 +165,14 @@ def process_post(post):
     download_media(media_url, filename.replace('/', '_'), source, 'downloads/'+sub_reddit)
 
 
-def request_reddit(url):
+def request_reddit(url, workers):
         response = r.get(url, headers=headers)
         if response.status_code == 200:
                 response_json = response.json()
                 next_page = response_json['data']['after']
                 posts = response_json['data']['children']
 
-                with ThreadPoolExecutor(max_workers=16) as runner:
+                with ThreadPoolExecutor(max_workers=workers) as runner:
                     for post in posts:
                         runner.submit(process_post, post)
 
@@ -165,10 +182,10 @@ def request_reddit(url):
                                 url = url+'&after='+next_page
                         else:
                                 url = url + '?after='+next_page
-                        request_reddit(url)
+                        request_reddit(url, workers)
         else:
                 print(response)
 
 
-request_reddit(url)
+request_reddit(url, args.threads)
 print(exceptions)
