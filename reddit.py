@@ -10,10 +10,10 @@ from concurrent.futures import ThreadPoolExecutor
 import shutil
 
 parser = argparse.ArgumentParser(description='Process some integers.')
-parser.add_argument('--sort', default='top', help='top or hot')
-parser.add_argument('--subreddit', help='name of the subreddit')
-parser.add_argument('--user', help='user name')
-parser.add_argument('--threads', type=int, default=1, help='parallel threads amount, default 1')
+parser.add_argument('-s', '--sort', default='top', help='top or hot')
+parser.add_argument('-r', '--subreddit', help='name of the subreddit')
+parser.add_argument('-u', '--user', help='user name')
+parser.add_argument('-t', '--threads', type=int, default=1, help='parallel threads amount, default 1')
 
 args = parser.parse_args()
 print(args) 
@@ -23,8 +23,10 @@ if args.subreddit:
 
     if args.sort == 'top':
         url = 'https://www.reddit.com/r/{0}/top.json?sort=top&t=all'.format(sub_reddit)
-    else:
+    elif args.sort == 'hot':
         url = 'https://www.reddit.com/r/{0}/.json?'.format(sub_reddit)
+    else:
+        raise parser.error('Unsupported sorting mode')
 elif args.user:
     sub_reddit = args.user
     url = 'https://www.reddit.com/user/{0}.json'.format(sub_reddit)
