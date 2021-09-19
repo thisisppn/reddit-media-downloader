@@ -3,17 +3,16 @@
 import argparse
 import os
 import shutil
-import sys
-import time
 from concurrent.futures import ThreadPoolExecutor
 
 import requests as r
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('-s', '--sort', default='top', help='top or hot')
 parser.add_argument('-r', '--subreddit', help='name of the subreddit')
 parser.add_argument('-u', '--user', help='user name')
-parser.add_argument('-t', '--threads', type=int, default=1, help='parallel threads amount, default 1')
+parser.add_argument('-t', '--threads', type=int, default=1, help='parallel threads per page amount, default 1')
 
 args = parser.parse_args()
 
@@ -32,18 +31,20 @@ elif args.user:
 else:
     raise parser.error('No user or subreddit name')
 
-gfycat = 'https://gfycat.com/cajax/get/{0}'
-redgifs = 'https://api.redgifs.com/v1/gfycats/{}'
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36',
 }
 
 exceptions = {}
-filenames = []
 downloads = []
 
-def get_gfycat_url(gfycat_name):
-    response = r.get(gfycat.format(gfycat_name), headers=headers)
+
+def get_url(domain_name, name):
+    urls = {
+        'gfycat.com': 'https://gfycat.com/cajax/get/{0}',
+        'redgifs.com': 'https://api.redgifs.com/v1/gfycats/{}',
+    }
+    response = r.get(urls[domain_name].format(name), headers=headers)
 
     if response.status_code == 200:
         response_json = response.json()
@@ -52,106 +53,56 @@ def get_gfycat_url(gfycat_name):
     else:
         return False
 
-def get_redgifs_url(redgifs_name):
-    response = r.get(redgifs.format(redgifs_name), headers=headers)
 
-    if response.status_code == 200:
-        response_json = response.json()
-        mp4url = response_json['gfyItem']['mp4Url']
-        return mp4url
-    else:
+def http_download(img_url, folder_name, file_name, timeout):
+    if img_url in downloads:
         return False
 
-def reporthook(count, block_size, total_size):
-    global start_time
-    if count == 0:
-        start_time = time.time()
+    file_suffix = os.path.splitext(img_url)[1]
+    filename = '{}{}{}{}'.format(folder_name, os.sep, file_name, file_suffix)
+
+    if os.path.exists(filename):
+        start_position = os.stat(filename).st_size
+    else:
+        start_position = 0
+
+    header = r.head(img_url, timeout=timeout)
+    total_size = int(header.headers.get('content-length'))
+
+    if start_position >= total_size:
         return
-    duration = time.time() - start_time
-    progress_size = int(count * block_size)
-    speed = int(progress_size / (1024 * duration))
-    percent = int(count * block_size * 100 / total_size)
-    sys.stdout.write("\r...%d%%, %d MB, %d KB/s, %d seconds passed" %
-                     (percent, progress_size / (1024 * 1024), speed, duration))
-    sys.stdout.flush()
 
+    headers = None
+    if start_position > 0:
+        headers = {'Range': f'{start_position}-{total_size}'}
 
-def http_download(img_url, filename, timeout):
-    with r.get(img_url, stream=True, timeout=timeout) as req:
-        with open(filename, 'wb') as f:
-            shutil.copyfileobj(req.raw, f)
+    resp = r.get(img_url, stream=True, timeout=timeout, headers=headers)
+    downloads.append(img_url)
+
+    with open(filename, 'wb') as f, tqdm(
+        desc=img_url, total=total_size, unit='B', unit_scale=True, leave=False) as pbar:
+        for chunk in resp.iter_content(chunk_size=1024):
+            if chunk:
+                bytes = f.write(chunk)
+                pbar.update(bytes)
 
 
 def download_media(img_url, file_name, source, folder_name):
     try:
-        file_path = folder_name
-        if not os.path.exists(file_path):
-            print('???', file_path, '????????')
-            os.makedirs(file_path)
+        if not os.path.exists(folder_name):
+            os.makedirs(folder_name, exist_ok=True)
 
-        if source == 'gfycat.com':
-            gfycat_name = img_url.split('/')[-1]
-            img_url = get_gfycat_url(gfycat_name)
-            if img_url:
-                if img_url in downloads:
-                    print('\n{0} already downloaded'.format(img_url))
-                    return False
-                file_suffix = os.path.splitext(img_url)[1]
-                filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
-                if os.path.exists(filename) or filename in filenames:
-                    print("File {0} already exists".format(filename))
-                    return False
-                print('\nDownloading gfycat', img_url)
-                filenames.append(filename)
-                downloads.append(img_url)
-                http_download(img_url, filename, 10)
-        elif source == 'i.imgur.com':
+        if source in ['gfycat.com', 'redgifs.com']:
+            name = img_url.split('/')[-1]
+            img_url = get_url(source, name)
+        elif source in ['i.imgur.com', 'i.redd.it']:
             img_url = img_url.replace('.gifv', '.mp4')
-            if img_url in downloads:
-                print('\n{0} already downloaded'.format(img_url))
-                return False
-            file_suffix = os.path.splitext(img_url)[1]
-            filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
-            if os.path.exists(filename) or filename in filenames:
-                print("File {0} already exists".format(filename))
-                return False
-            print('\nDownloading imgur', img_url)
-            filenames.append(filename)
-            downloads.append(img_url)
-            http_download(img_url, filename, 10)
-        elif source == 'i.redd.it':
-            if img_url in downloads:
-                print('\n{0} already downloaded'.format(img_url))
-                return False
-            file_suffix = os.path.splitext(img_url)[1]
-            filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
-            if os.path.exists(filename) or filename in filenames:
-                print("File {0} already exists".format(filename))
-                return False
-            print('\nDownloading reddit', img_url)
-            filenames.append(filename)
-            downloads.append(img_url)
-            http_download(img_url, filename, 10)
-        elif source == 'redgifs.com':
-            redgifs_name = img_url.split('/')[-1]
-            img_url = get_redgifs_url(redgifs_name)
-            if img_url:
-                if img_url in downloads:
-                    print('\n{0} already downloaded'.format(img_url))
-                    return False
-                file_suffix = os.path.splitext(img_url)[1]
-                filename = '{}{}{}{}'.format(file_path, os.sep, file_name, file_suffix)
-                if os.path.exists(filename) or filename in filenames:
-                    print("File {0} already exists".format(filename))
-                    return False
-                print('\nDownloading redgifs', img_url)
-                filenames.append(filename)
-                downloads.append(img_url)
-                http_download(img_url, filename, 10)
-
         else:
             exceptions[source] = img_url
+            return
 
+        if img_url:
+            http_download(img_url, folder_name, file_name, 10)
     except IOError as e:
         print('??????', e)
     except Exception as e:
@@ -159,19 +110,18 @@ def download_media(img_url, file_name, source, folder_name):
 
 
 def process_post(post):
-    # Identify post download url and source.
     try:
-        source = post['data']['domain']
+        download_media(
+            post['data']['url'],
+            post['data']['title'].replace('/', '_'),
+            post['data']['domain'],
+            'downloads/{}'.format(sub_reddit))
     except KeyError:
-        print('No domain in data object')
-        return
-    media_url = post['data']['url']
-    filename = post['data']['title']
-    download_media(media_url, filename.replace('/', '_'), source, 'downloads/'+sub_reddit)
+        print("Unsupported media, skipping")
 
 
-def request_reddit(url, workers):
-    response = r.get(url, headers=headers, timeout=10)
+def request_reddit(media_url, workers):
+    response = r.get(media_url, headers=headers, timeout=10)
     if response.status_code == 200:
         response_json = response.json()
         next_page = response_json['data']['after']
@@ -182,12 +132,11 @@ def request_reddit(url, workers):
                 runner.submit(process_post, post)
 
             if next_page is not None:
-                print("\nHeading over to next page ... ")
-                if '?' in url:
-                    url = url + '&after=' + next_page
+                if '?' in media_url:
+                    media_url = media_url + '&after=' + next_page
                 else:
-                    url = url + '?after=' + next_page
-                runner.submit(request_reddit, url, workers)
+                    media_url = media_url + '?after=' + next_page
+                runner.submit(request_reddit, media_url, workers)
     else:
         print(response)
 
