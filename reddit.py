@@ -13,6 +13,7 @@ parser.add_argument('-s', '--sort', default='top', help='top or hot')
 parser.add_argument('-r', '--subreddit', help='name of the subreddit')
 parser.add_argument('-u', '--user', help='user name')
 parser.add_argument('-t', '--threads', type=int, default=1, help='parallel threads per page amount, default 1')
+parser.add_argument('-i', '--images-only', action='store_true', help='Download only files with content-type images')
 
 args = parser.parse_args()
 
@@ -58,6 +59,7 @@ def http_download(img_url, folder_name, file_name, timeout):
     if img_url in downloads:
         return False
 
+    downloads.append(img_url)
     file_suffix = os.path.splitext(img_url)[1]
     filename = '{}{}{}{}'.format(folder_name, os.sep, file_name, file_suffix)
 
@@ -68,6 +70,10 @@ def http_download(img_url, folder_name, file_name, timeout):
 
     header = r.head(img_url, timeout=timeout)
     total_size = int(header.headers.get('content-length'))
+    content_type = header.headers.get('content-type')
+
+    if content_type and args.images_only and not content_type.startswith('image/'):
+        return False
 
     if start_position >= total_size:
         return
@@ -77,7 +83,6 @@ def http_download(img_url, folder_name, file_name, timeout):
         headers = {'Range': f'{start_position}-{total_size}'}
 
     resp = r.get(img_url, stream=True, timeout=timeout, headers=headers)
-    downloads.append(img_url)
 
     with open(filename, 'wb') as f, tqdm(
         desc=img_url, total=total_size, unit='B', unit_scale=True, leave=False) as pbar:
@@ -117,7 +122,7 @@ def process_post(post):
             post['data']['domain'],
             'downloads/{}'.format(sub_reddit))
     except KeyError:
-        print("Unsupported media, skipping")
+        pass
 
 
 def request_reddit(media_url, workers):
